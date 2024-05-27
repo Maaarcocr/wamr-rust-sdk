@@ -80,9 +80,11 @@ impl HostFunctionList {
 
     pub fn register_host_function(&mut self, function_name: &str, function_ptr: *mut c_void, params: &[ParamTy], result: ResultTy) {
         let mut signature = Vec::new();
+        signature.push(b'(');
         for param in params {
             param.encode(&mut signature);
         }
+        signature.push(b')');
         result.encode(&mut signature);
         let signature = CString::new(signature).unwrap();
 
