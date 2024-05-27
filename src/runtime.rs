@@ -112,9 +112,11 @@ impl RuntimeBuilder {
         mut self,
         function_name: &str,
         function_ptr: *mut c_void,
+        params: &[crate::host_function::ParamTy],
+        result: crate::host_function::ResultTy,
     ) -> RuntimeBuilder {
         self.host_functions
-            .register_host_function(function_name, function_ptr);
+            .register_host_function(function_name, function_ptr, params, result);
         self
     }
 

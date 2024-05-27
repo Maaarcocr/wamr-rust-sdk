@@ -9,11 +9,54 @@ use std::ptr;
 
 use wamr_sys::NativeSymbol;
 
+pub enum ParamTy {
+    I32,
+    I64,
+    F32,
+    F64,
+    Str,
+    Pointer,
+    Buffer,
+}
+
+impl ParamTy {
+    pub fn encode(&self, str: &mut Vec<u8>) {
+        match self {
+            ParamTy::I32 => str.push(b'i'),
+            ParamTy::I64 => str.push(b'I'),
+            ParamTy::F32 => str.push(b'f'),
+            ParamTy::F64 => str.push(b'F'),
+            ParamTy::Str => str.push(b'$'),
+            ParamTy::Pointer => str.push(b'*'),
+            ParamTy::Buffer => str.extend_from_slice(b"*~"),
+        }
+    }
+}
+
+pub enum ResultTy {
+    I32,
+    I64,
+    F32,
+    F64,
+}
+
+impl ResultTy {
+    pub fn encode(&self, str: &mut Vec<u8>) {
+        match self {
+            ResultTy::I32 => str.push(b'i'),
+            ResultTy::I64 => str.push(b'I'),
+            ResultTy::F32 => str.push(b'f'),
+            ResultTy::F64 => str.push(b'F'),
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug)]
 struct HostFunction {
     function_name: CString,
     function_ptr: *mut c_void,
+    signature: CString,
 }
 
 #[derive(Debug)]
@@ -33,15 +76,23 @@ impl HostFunctionList {
         }
     }
 
-    pub fn register_host_function(&mut self, function_name: &str, function_ptr: *mut c_void) {
+    pub fn register_host_function(&mut self, function_name: &str, function_ptr: *mut c_void, params: &[ParamTy], result: ResultTy) {
+        let mut signature = Vec::new();
+        for param in params {
+            param.encode(&mut signature);
+        }
+        result.encode(&mut signature);
+        let signature = CString::new(signature).unwrap();
+
         self.host_functions.push(HostFunction {
             function_name: CString::new(function_name).unwrap(),
             function_ptr,
+            signature,
         });
 
         let last = self.host_functions.last().unwrap();
         self.native_symbols
-            .push(pack_host_function(&(last.function_name), function_ptr));
+            .push(pack_host_function(&(last.function_name), function_ptr, &(last.signature)));
     }
 
     pub fn get_native_symbols(&mut self) -> &mut Vec<NativeSymbol> {
@@ -53,11 +104,11 @@ impl HostFunctionList {
     }
 }
 
-pub fn pack_host_function(function_name: &CString, function_ptr: *mut c_void) -> NativeSymbol {
+fn pack_host_function(function_name: &CString, function_ptr: *mut c_void, signature: &CString) -> NativeSymbol {
     NativeSymbol {
         symbol: function_name.as_ptr(),
         func_ptr: function_ptr,
-        signature: ptr::null(),
+        signature: signature.as_ptr(),
         attachment: ptr::null_mut(),
     }
 }
@@ -65,7 +116,7 @@ pub fn pack_host_function(function_name: &CString, function_ptr: *mut c_void) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::user_data::{ExecEnv, UserData};
+    use crate::user_data::{ExecEnv, Caller};
     use crate::{
         function::Function, instance::Instance, module::Module, runtime::Runtime, value::WasmValue,
     };
@@ -80,7 +131,7 @@ mod tests {
     fn test_host_function() {
         let runtime = Runtime::builder()
             .use_system_allocator()
-            .register_host_function("extra", extra as *mut c_void)
+            .register_host_function("extra", extra as *mut c_void, &[], ResultTy::I32)
             .build()
             .unwrap();
 
@@ -109,7 +160,7 @@ mod tests {
     }
 
     extern "C" fn extra_with_side_effect(env: ExecEnv) -> i32 {
-        let mut user_data: UserData<Counter> = UserData::from_env(env);
+        let mut user_data: Caller<Counter> = Caller::from_env(env);
         let count = user_data.data_mut();
         count.count += 1;
         count.count
@@ -119,7 +170,7 @@ mod tests {
     fn test_host_function_with_side_effect() {
         let runtime = Runtime::builder()
             .use_system_allocator()
-            .register_host_function("extra", extra_with_side_effect as *mut c_void)
+            .register_host_function("extra", extra_with_side_effect as *mut c_void, &[], ResultTy::I32)
             .build()
             .unwrap();
 
