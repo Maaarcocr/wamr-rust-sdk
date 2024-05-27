@@ -97,6 +97,24 @@ impl<T> Instance<T> {
     pub fn get_inner_instance(&self) -> wasm_module_inst_t {
         self.instance
     }
+
+    pub fn data(&self) -> &T {
+        let raw_user_data = unsafe {
+            let instance = self.get_inner_instance();
+            let exec_env = wamr_sys::wasm_runtime_get_exec_env_singleton(instance);
+            wamr_sys::wasm_runtime_get_user_data(exec_env)
+        };
+        unsafe { &*(raw_user_data as *const T) }
+    }
+
+    pub fn data_mut(&mut self) -> &mut T {
+        let raw_user_data = unsafe {
+            let instance = self.get_inner_instance();
+            let exec_env = wamr_sys::wasm_runtime_get_exec_env_singleton(instance);
+            wamr_sys::wasm_runtime_get_user_data(exec_env)
+        };
+        unsafe { &mut *(raw_user_data as *mut T) }
+    }
 }
 
 impl<T> Drop for Instance<T> {
