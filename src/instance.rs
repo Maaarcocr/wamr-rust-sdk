@@ -9,6 +9,7 @@
 #![allow(unused_variables)]
 
 use core::ffi::c_char;
+use std::marker::PhantomData;
 
 use wamr_sys::{
     wasm_module_inst_t, wasm_runtime_deinstantiate, wasm_runtime_destroy_thread_env,
@@ -21,18 +22,19 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Instance {
+pub struct Instance<T> {
     instance: wasm_module_inst_t,
+    _data: PhantomData<T>
 }
 
-impl Instance {
+impl<T> Instance<T> {
     /// instantiate a module with stack size
     ///
     /// # Error
     ///
     /// Return `RuntimeError::CompilationError` if failed.
-    pub fn new(runtime: &Runtime, module: &Module, stack_size: u32) -> Result<Self, RuntimeError> {
-        Self::new_with_args(runtime, module, stack_size, 0)
+    pub fn new(runtime: &Runtime, module: &Module, stack_size: u32, data: T) -> Result<Self, RuntimeError> {
+        Self::new_with_args(runtime, module, stack_size, 0, data)
     }
 
     /// instantiate a module with stack size and host managed heap size
@@ -47,6 +49,7 @@ impl Instance {
         module: &Module,
         stack_size: u32,
         heap_size: u32,
+        data: T,
     ) -> Result<Self, RuntimeError> {
         let init_thd_env = unsafe { wasm_runtime_init_thread_env() };
         if !init_thd_env {
@@ -81,7 +84,14 @@ impl Instance {
             }
         }
 
-        Ok(Instance { instance })
+        let boxed_data = Box::new(data);
+        let raw = Box::into_raw(boxed_data);
+        let exec_env = unsafe { wamr_sys::wasm_runtime_get_exec_env_singleton(instance) };
+        unsafe {
+            wamr_sys::wasm_runtime_set_user_data(exec_env, raw as *mut std::ffi::c_void);
+        }
+
+        Ok(Instance { instance, _data: PhantomData })
     }
 
     pub fn get_inner_instance(&self) -> wasm_module_inst_t {
@@ -89,8 +99,16 @@ impl Instance {
     }
 }
 
-impl Drop for Instance {
+impl<T> Drop for Instance<T> {
     fn drop(&mut self) {
+        let raw_user_data = unsafe {
+            let instance = self.get_inner_instance();
+            let exec_env = wamr_sys::wasm_runtime_get_exec_env_singleton(instance);
+            wamr_sys::wasm_runtime_get_user_data(exec_env)
+        };
+        if !raw_user_data.is_null() {
+            let _ = unsafe { Box::from_raw(raw_user_data as *mut T) };
+        }
         unsafe {
             wasm_runtime_destroy_thread_env();
             wasm_runtime_deinstantiate(self.instance);
@@ -129,10 +147,10 @@ mod tests {
 
         let module = &module.unwrap();
 
-        let instance = Instance::new_with_args(&runtime, module, 1024, 1024);
+        let instance = Instance::new_with_args(&runtime, module, 1024, 1024, ());
         assert!(instance.is_ok());
 
-        let instance = Instance::new_with_args(&runtime, module, 1024, 0);
+        let instance = Instance::new_with_args(&runtime, module, 1024, 0, ());
         assert!(instance.is_ok());
 
         let instance = instance.unwrap();
@@ -170,7 +188,7 @@ mod tests {
 
         let module = &module.unwrap();
 
-        let instance = Instance::new_with_args(&runtime, module, 1024, 1024);
+        let instance = Instance::new_with_args(&runtime, module, 1024, 1024, ());
         assert!(instance.is_ok());
 
         let instance = instance.unwrap();
@@ -212,7 +230,7 @@ mod tests {
 
         let module = &module.unwrap();
 
-        let instance = Instance::new_with_args(&runtime, module, 1024, 1024);
+        let instance = Instance::new_with_args(&runtime, module, 1024, 1024, ());
         assert!(instance.is_ok());
 
         let instance = instance.unwrap();

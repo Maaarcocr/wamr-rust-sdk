@@ -65,6 +65,7 @@ pub fn pack_host_function(function_name: &CString, function_ptr: *mut c_void) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::user_data::{ExecEnv, UserData};
     use crate::{
         function::Function, instance::Instance, module::Module, runtime::Runtime, value::WasmValue,
     };
@@ -76,7 +77,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_host_function() {
         let runtime = Runtime::builder()
             .use_system_allocator()
@@ -91,9 +91,9 @@ mod tests {
         assert!(module.is_ok());
         let module = module.unwrap();
 
-        let instance = Instance::new(&runtime, &module, 1024 * 64);
+        let instance = Instance::new(&runtime, &module, 1024 * 64, ());
         assert!(instance.is_ok());
-        let instance: &Instance = &instance.unwrap();
+        let instance: &Instance<()> = &instance.unwrap();
 
         let function = Function::find_export_func(instance, "add");
         assert!(function.is_ok());
@@ -102,5 +102,48 @@ mod tests {
         let params: Vec<WasmValue> = vec![WasmValue::I32(8), WasmValue::I32(8)];
         let result = function.call(instance, &params);
         assert_eq!(result.unwrap(), WasmValue::I32(116));
+    }
+
+    struct Counter {
+        count: i32,
+    }
+
+    extern "C" fn extra_with_side_effect(env: ExecEnv) -> i32 {
+        let mut user_data: UserData<Counter> = UserData::from_env(env);
+        let count = user_data.data_mut();
+        count.count += 1;
+        count.count
+    }
+
+    #[test]
+    fn test_host_function_with_side_effect() {
+        let runtime = Runtime::builder()
+            .use_system_allocator()
+            .register_host_function("extra", extra_with_side_effect as *mut c_void)
+            .build()
+            .unwrap();
+
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("resources/test");
+        d.push("add_extra_wasm32_wasi.wasm");
+        let module = Module::from_file(&runtime, d.as_path());
+        assert!(module.is_ok());
+        let module = module.unwrap();
+
+        let instance = Instance::new(&runtime, &module, 1024 * 64, Counter { count: 0 });
+        assert!(instance.is_ok());
+        let instance: &Instance<Counter> = &instance.unwrap();
+
+        let function = Function::find_export_func(instance, "add");
+        assert!(function.is_ok());
+        let function = function.unwrap();
+
+        let params: Vec<WasmValue> = vec![WasmValue::I32(8), WasmValue::I32(8)];
+        let result = function.call(instance, &params);
+        assert_eq!(result.unwrap(), WasmValue::I32(17));
+
+        let params: Vec<WasmValue> = vec![WasmValue::I32(8), WasmValue::I32(8)];
+        let result = function.call(instance, &params);
+        assert_eq!(result.unwrap(), WasmValue::I32(18));
     }
 }

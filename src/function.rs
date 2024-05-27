@@ -26,7 +26,7 @@ impl Function {
     /// # Error
     ///
     /// Return `RuntimeError::FunctionNotFound` if failed.
-    pub fn find_export_func(instance: &Instance, name: &str) -> Result<Function, RuntimeError> {
+    pub fn find_export_func<T>(instance: &Instance<T>, name: &str) -> Result<Function, RuntimeError> {
         let name = CString::new(name).expect("CString::new failed");
         let function =
             unsafe { wasm_runtime_lookup_function(instance.get_inner_instance(), name.as_ptr()) };
@@ -37,9 +37,9 @@ impl Function {
     }
 
     #[allow(non_upper_case_globals)]
-    fn parse_result(
+    fn parse_result<T>(
         &self,
-        instance: &Instance,
+        instance: &Instance<T>,
         result: Vec<u32>,
     ) -> Result<WasmValue, RuntimeError> {
         let result_count =
@@ -72,9 +72,9 @@ impl Function {
     /// # Error
     ///
     /// Return `RuntimeError::ExecutionError` if failed.
-    pub fn call(
+    pub fn call<T>(
         &self,
-        instance: &Instance,
+        instance: &Instance<T>,
         params: &Vec<WasmValue>,
     ) -> Result<WasmValue, RuntimeError> {
         // params -> Vec<u32>
@@ -133,9 +133,9 @@ mod tests {
         assert!(module.is_ok());
         let module = module.unwrap();
 
-        let instance = Instance::new(&runtime, &module, 1024);
+        let instance = Instance::new(&runtime, &module, 1024, ());
         assert!(instance.is_ok());
-        let instance: &Instance = &instance.unwrap();
+        let instance: &Instance<()> = &instance.unwrap();
 
         let function = Function::find_export_func(instance, "add");
         assert!(function.is_ok());
@@ -168,9 +168,9 @@ mod tests {
             .build();
         module.set_wasi_context(wasi_ctx);
 
-        let instance = Instance::new(&runtime, &module, 1024 * 64);
+        let instance = Instance::new(&runtime, &module, 1024 * 64, ());
         assert!(instance.is_ok());
-        let instance: &Instance = &instance.unwrap();
+        let instance: &Instance<()> = &instance.unwrap();
 
         let function = Function::find_export_func(instance, "gcd");
         assert!(function.is_ok());

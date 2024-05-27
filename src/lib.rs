@@ -79,7 +79,7 @@
 //!
 //!     let module = Module::from_file(&runtime, d.as_path())?;
 //!
-//!     let instance = Instance::new(&runtime, &module, 1024 * 64)?;
+//!     let instance = Instance::new(&runtime, &module, 1024 * 64, ())?;
 //!
 //!     let function = Function::find_export_func(&instance, "gcd")?;
 //!
@@ -128,7 +128,7 @@
 //!     d.push("add_extra_wasm32_wasi.wasm");
 //!     let module = Module::from_file(&runtime, d.as_path())?;
 //!
-//!     let instance = Instance::new(&runtime, &module, 1024 * 64)?;
+//!     let instance = Instance::new(&runtime, &module, 1024 * 64, ())?;
 //!
 //!     let function = Function::find_export_func(&instance, "add")?;
 //!
@@ -153,6 +153,7 @@ pub mod module;
 pub mod runtime;
 pub mod value;
 pub mod wasi_context;
+pub mod user_data;
 
 /// all kinds of exceptions raised by WAMR
 #[derive(Debug)]
