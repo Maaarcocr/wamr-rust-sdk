@@ -38,6 +38,7 @@ pub enum ResultTy {
     I64,
     F32,
     F64,
+    Void,
 }
 
 impl ResultTy {
@@ -47,6 +48,7 @@ impl ResultTy {
             ResultTy::I64 => str.push(b'I'),
             ResultTy::F32 => str.push(b'f'),
             ResultTy::F64 => str.push(b'F'),
+            ResultTy::Void => {}
         }
     }
 }
